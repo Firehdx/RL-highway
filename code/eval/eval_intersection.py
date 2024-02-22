@@ -1,6 +1,7 @@
 import gymnasium as gym
 from gymnasium.wrappers import RecordVideo
-import highway_env
+import numpy as np 
+import os 
 
 env = gym.make("intersection-v0", render_mode="rgb_array")
 
@@ -28,27 +29,34 @@ env.configure({
     "duration": 13,  # [s]
     "simulation_frequency": 15,  # [Hz]
     "policy_frequency": 1,  # [Hz]
+    "normalize_reward": True,
+    "offroad_terminal": True,
 })
 
 env.reset()
 
-print(env.action_space,env.observation_space)
-def act_inference(obs):
-    #! Load Your own act_inferece
-    action = env.action_space.sample()
-    return action 
+def load_act_inference():
+    #! Load your own act_inference
+    #! act_inference= obs: np.ndarray -> action: np.ndarray
+    """
+    Example:
+
+    act_inference = model.forward 
+    return act_inference
+
+    """
+    return lambda obs: env.action_space.sample()
 
 
-if __name__ == '__main__':
-    # Create the environment
-    
-    obs, info = env.reset()
 
-    env = RecordVideo(env, video_folder="intersection/videos", episode_trigger=lambda e: True)
-    env.unwrapped.set_record_video_wrapper(env)
-    env.configure({"simulation_frequency": 15})  # Higher FPS for rendering
+act_inference = load_act_inference()
 
-    for videos in range(1):
+def eval_intersection(num_runs,save_path = None):
+    eval_results = {}
+    list_ep_ret = []
+    list_ep_len = []
+    for i in range(num_runs):
+        ep_ret,ep_len = 0,0
         done = truncated = False
         obs, info = env.reset()
         while not (done or truncated):
@@ -56,6 +64,29 @@ if __name__ == '__main__':
             action = act_inference(obs)
             # Get reward
             obs, reward, done, truncated, info = env.step(action)
-            # Render
-            env.render()
+            ep_ret += reward
+            ep_len += 1
+        list_ep_ret.append(ep_ret)
+        list_ep_len.append(ep_len)
+    eval_results['ep_ret'] = np.array(list_ep_ret) 
+    eval_results['ep_len'] = np.array(list_ep_len) 
+
+    if save_path is not None:
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        file_name = save_path + '/eval_results_intersection.npy' 
+        np.save(file_name,eval_results)
+    
+    for k,v in eval_results.items():
+        print(k,f" Mean: {v.mean().round(4)}, Std: {v.std().round(4)}")
+
+
+
+            
+
+
+
+if __name__ == '__main__':
+
+    eval_intersection(100,save_path = "eval_files/results")
     env.close()
